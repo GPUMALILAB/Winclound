@@ -1,0 +1,149 @@
+name: Windows RDP Gaming Setup V10
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Tempo ativo (minutos)'
+        required: true
+        default: '360'
+
+jobs:
+  windows-rdp:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Instalar Tailscale
+        shell: powershell
+        run: |
+          Write-Host "Baixando Tailscale..."
+          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile "$env:TEMP\tailscale.msi"
+          Write-Host "Instalando..."
+          Start-Process msiexec.exe -ArgumentList "/i $env:TEMP\tailscale.msi /quiet /norestart" -Wait -NoNewWindow
+          Start-Sleep -Seconds 15
+          
+      - name: Conectar ao Tailscale
+        shell: powershell
+        run: |
+          Write-Host "Conectando ao Tailscale..."
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=tskey-auth-kK7Wmdjzme11CNTRL-2tVaXw7poh9G2WzD6TH9i995bZkru8LTU --hostname=github-gaming-${{ github.run_number }} --accept-routes
+          Start-Sleep -Seconds 10
+          
+      - name: Configurar RDP e Usuario
+        shell: powershell
+        run: |
+          Write-Host "Criando usuario..."
+          $Password = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 14 | ForEach-Object {[char]$_})
+          $SecurePass = ConvertTo-SecureString $Password -AsPlainText -Force
+          $UserExists = Get-LocalUser -Name "gamer" -ErrorAction SilentlyContinue
+          if ($UserExists) {
+              Write-Host "Usuario ja existe, resetando senha..."
+              Set-LocalUser -Name "gamer" -Password $SecurePass
+          } else {
+              Write-Host "Criando novo usuario..."
+              New-LocalUser -Name "gamer" -Password $SecurePass -FullName "Gaming User" -Description "Gaming Setup"
+              Add-LocalGroupMember -Group "Administrators" -Member "gamer"
+              Add-LocalGroupMember -Group "Remote Desktop Users" -Member "gamer"
+          }
+          Write-Host "Habilitando RDP..."
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          $Password | Out-File -FilePath "$env:TEMP\rdp_password.txt" -Force
+          Write-Host "Usuario criado com sucesso!"
+
+      - name: Instalar Chocolatey
+        shell: powershell
+        run: |
+          Write-Host "Instalando Chocolatey..."
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          
+      - name: Instalar Steam
+        shell: powershell
+        run: |
+          Write-Host "Instalando Steam..."
+          choco install steam -y --ignore-checksums
+          Write-Host "Steam instalado!"
+          
+      - name: Baixar LuaTools
+        shell: powershell
+        run: |
+          Write-Host "Baixando LuaTools v1.3.1..."
+          $LuaToolsUrl = "https://github.com/madoiscool/LuaTools/releases/download/v1.3.1/LuaTools-win-Setup.exe"
+          $Desktop = [Environment]::GetFolderPath("CommonDesktopDirectory")
+          $LuaToolsPath = "$Desktop\LuaTools-Setup.exe"
+          try {
+              Invoke-WebRequest -Uri $LuaToolsUrl -OutFile $LuaToolsPath -UseBasicParsing
+              Write-Host "LuaTools baixado para: $LuaToolsPath"
+          } catch {
+              Write-Host "Erro ao baixar LuaTools: $_"
+          }
+
+      - name: Criar arquivo de info
+        shell: powershell
+        run: |
+          $Desktop = [Environment]::GetFolderPath("CommonDesktopDirectory")
+          $info = "GAMING SETUP - WINDOWS RDP`n`n"
+          $info += "APPS INSTALADOS:`n"
+          $info += "- Steam (instalado e pronto)`n`n"
+          $info += "INSTALADORES BAIXADOS (na area de trabalho):`n"
+          $info += "- LuaTools-Setup.exe`n`n"
+          $info += "Execute o instalador clicando 2x nele`n`n"
+          $info += "Aproveite seu setup gaming!`n"
+          $info | Out-File -FilePath "$Desktop\GAMING_SETUP_INFO.txt" -Encoding UTF8
+          Write-Host "Arquivo criado!"
+
+      - name: Mostrar informacoes
+        shell: powershell
+        run: |
+          $IP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+          $Password = Get-Content "$env:TEMP\rdp_password.txt"
+          Write-Host ""
+          Write-Host "========================================================"
+          Write-Host "GAMING SETUP PRONTO"
+          Write-Host "========================================================"
+          Write-Host ""
+          Write-Host "IP: $IP"
+          Write-Host "Usuario: gamer"
+          Write-Host "Senha: $Password"
+          Write-Host ""
+          Write-Host "INSTALADO:"
+          Write-Host "- Steam (pronto para usar)"
+          Write-Host ""
+          Write-Host "BAIXADO NA AREA DE TRABALHO (instale manualmente):"
+          Write-Host "- LuaTools-Setup.exe"
+          Write-Host ""
+          Write-Host "Sessao: ${{ github.event.inputs.duration }} minutos"
+          Write-Host ""
+          
+      - name: Manter ativo
+        shell: powershell
+        run: |
+          $Duration = [int]"${{ github.event.inputs.duration }}"
+          Write-Host "Servidor ativo!"
+          for ($i = 1; $i -le $Duration; $i++) {
+              $Remaining = $Duration - $i
+              $Sessions = qwinsta 2>$null | Select-String "rdp" | Measure-Object
+              $ActiveRDP = $Sessions.Count
+              if ($i % 1 -eq 0) {
+                  $Time = Get-Date -Format "HH:mm:ss"
+                  Write-Host "[$Time] $i/$Duration min | Restam $Remaining | Conexoes $ActiveRDP"
+              }
+              if ($i % 10 -eq 0) {
+                  $IP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+                  Write-Host "IP: $IP"
+              }
+              Start-Sleep -Seconds 60
+          }
+          Write-Host "Tempo esgotado"
+          
+      - name: Limpar
+        if: always()
+        shell: powershell
+        run: |
+          Write-Host "Desconectando..."
+          & "C:\Program Files\Tailscale\tailscale.exe" down
+          Remove-Item "$env:TEMP\rdp_password.txt" -ErrorAction SilentlyContinue
+          Write-Host "Encerrado!"

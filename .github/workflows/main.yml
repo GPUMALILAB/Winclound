@@ -1,4 +1,4 @@
-name: Windows RDP Gaming Setup V10
+name: Windows RDP Setup V11
 
 on:
   workflow_dispatch:
@@ -52,35 +52,6 @@ jobs:
           $Password | Out-File -FilePath "$env:TEMP\rdp_password.txt" -Force
           Write-Host "Usuario criado com sucesso!"
 
-      - name: Instalar Chocolatey
-        shell: powershell
-        run: |
-          Write-Host "Instalando Chocolatey..."
-          Set-ExecutionPolicy Bypass -Scope Process -Force
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-          
-      - name: Instalar Steam
-        shell: powershell
-        run: |
-          Write-Host "Instalando Steam..."
-          choco install steam -y --ignore-checksums
-          Write-Host "Steam instalado!"
-          
-      - name: Baixar LuaTools
-        shell: powershell
-        run: |
-          Write-Host "Baixando LuaTools v1.3.1..."
-          $LuaToolsUrl = "https://github.com/madoiscool/LuaTools/releases/download/v1.3.1/LuaTools-win-Setup.exe"
-          $Desktop = [Environment]::GetFolderPath("CommonDesktopDirectory")
-          $LuaToolsPath = "$Desktop\LuaTools-Setup.exe"
-          try {
-              Invoke-WebRequest -Uri $LuaToolsUrl -OutFile $LuaToolsPath -UseBasicParsing
-              Write-Host "LuaTools baixado para: $LuaToolsPath"
-          } catch {
-              Write-Host "Erro ao baixar LuaTools: $_"
-          }
-
       - name: Criar arquivo de info
         shell: powershell
         run: |
@@ -102,18 +73,14 @@ jobs:
           $Password = Get-Content "$env:TEMP\rdp_password.txt"
           Write-Host ""
           Write-Host "========================================================"
-          Write-Host "GAMING SETUP PRONTO"
+          Write-Host "SETUP PRONTO"
           Write-Host "========================================================"
           Write-Host ""
           Write-Host "IP: $IP"
           Write-Host "Usuario: gamer"
           Write-Host "Senha: $Password"
           Write-Host ""
-          Write-Host "INSTALADO:"
-          Write-Host "- Steam (pronto para usar)"
-          Write-Host ""
-          Write-Host "BAIXADO NA AREA DE TRABALHO (instale manualmente):"
-          Write-Host "- LuaTools-Setup.exe"
+          Write-Host "INSTALADO:
           Write-Host ""
           Write-Host "Sessao: ${{ github.event.inputs.duration }} minutos"
           Write-Host ""
